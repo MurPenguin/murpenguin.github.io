@@ -130,7 +130,8 @@
 <p>Then traverse along the inserting string, record nodes on the path with a stack, if there is no nodes, create a new one, otherwise copy the exisiting one. </p>
 <p>When reach the last node, if it exists, copy it and add values, otherwise create new one. </p>
 <p>Finally, from bottom to top, which has been recorded in the stack, connect all the nodes together </p>
-<p>![image-20250116160856563](.&#x2F;CS15-445 Lab 0.assets&#x2F;image-20250116160856563.png)</p>
+<!-- ![image-20250116160856563](./CS15-445 Lab 0.assets/image-20250116160856563.png) -->
+<p><img src="/images/image-20250116160856563.png" alt="image-20250116160856563"></p>
 <h3 id="Remove-operation"><a href="#Remove-operation" class="headerlink" title="Remove operation"></a><code>Remove</code> operation</h3><p>The same with insert operation, first copy the root node, then go down along the given string, find the tail node of this string. If it has children nodes, remove it value property by creating a new oridinary node; otherwise delete this node. </p>
 <p>Then from buttom to top, connect all the copied nodes together. </p>
 <h3 id="Concurrent-Key-value-Store"><a href="#Concurrent-Key-value-Store" class="headerlink" title="Concurrent Key-value Store"></a>Concurrent Key-value Store</h3><p>This part need to add mutex to the program compeleted in previous part. </p>
