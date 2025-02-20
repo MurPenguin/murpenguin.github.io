@@ -11,7 +11,7 @@
   
   <title>
     
-      Archives 
+      (NUS CS5223 Lab 2) Replicative Primary-Backup Server 
       
       
     
@@ -33,6 +33,10 @@
 
 
   
+
+  
+    
+<link rel="stylesheet" href="/css/post.css">
 
   
 
@@ -78,46 +82,55 @@
 
 
       <div class="main">
-        <!-- 归档页，展示本站所有文章，按照年份降序归类，url形式：https://yoursite/archives/ -->
+        <!-- 文章详情页，展示文章具体内容，url形式：https://yoursite/文章标题/ -->
+<!-- 同时为「标签tag」，「朋友friend」，「分类categories」，「关于about」页面的承载页面，具体展示取决于page.type -->
 
-<!-- last: 按年份把文章分组，当前遍历到的年份 -->
-<!-- now: 当前遍历到的文章的发布年份 -->
+<!-- LaTex Display -->
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+</script>
+<script>
+  MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']]
+    }
+  };
+</script>
 
-<div class="container archives">
-  <div class="post-list">
-    
-        <!-- 后续文章的发布年份呈现 -->
-        <div class="content-title">
-          <h2>
-            <span>2025</span>
-          </h2>
-        </div>
-      
-      <div class="post-item" title="(NUS CS5223 Lab 2) Replicative Primary-Backup Server">
-        <div class="time-m-d">02-20</div>
-        <div class="title">
-          <a href="/2025/02/20/CS5223%20Lab%202/">
-            
-              <span>(NUS CS5223 Lab 2) Replicative Primary-Backup Server</span>
-            
-          </a>
-        </div>
-      </div>
-    
-      <div class="post-item" title="(CS15-445 Lab 0) C++ Primer">
-        <div class="time-m-d">02-18</div>
-        <div class="title">
-          <a href="/2025/02/18/CS15-445%20Lab%200/">
-            
-              <span>(CS15-445 Lab 0) C++ Primer</span>
-            
-          </a>
-        </div>
-      </div>
-    
+<div class="post">
+  <h3 class="date">
+    Feb 20, 2025
+  </h3>
+  <h1>
+    (NUS CS5223 Lab 2) Replicative Primary-Backup Server
+  </h1>
+  <div class="content markdown-body">
+    <p>This lab requires to build a replicative server system as a distributive rpc system, which contains  primary server and a backup server selected from a server group, and set a view server to supervise and allocate the server state. Here is the brief idea in this lab design. </p>
+<h1 id="View-Server-Design"><a href="#View-Server-Design" class="headerlink" title="View Server Design"></a>View Server Design</h1><p>View server maintains the view state(address primary server and backup server) and communication records from the server. It update the view state based on the transfer of server ping. </p>
+<p>So the whole system relies on the assumption that the view server never fails, which is the biggest drawback. </p>
+<h2 id="The-confirmation-of-primary-server-and-backup-server"><a href="#The-confirmation-of-primary-server-and-backup-server" class="headerlink" title="The confirmation of primary server and backup server"></a>The confirmation of primary server and backup server</h2><p>When view server update the view (no matter pick a new primary server when starting, make backup server takes over, or update backup server), it should first set this new view as a pending view, sending it to the new primary, only officially update view state after the primary reply. </p>
+<p>Here are some scenarios where view server update its view and sync it with other server. </p>
+<h2 id="Scenarios-where-view-updates"><a href="#Scenarios-where-view-updates" class="headerlink" title="Scenarios where view updates"></a>Scenarios where view updates</h2><p>When the view server is at startup state, set the first pinged server as the primary server, and send the pending view to it, after it confirmed with response ping (which contains the updated view number), the view server update its view. </p>
+<p>And there is a special case for backup initialize, no matter whether view server is pending for primary server reply, when the backup position is vacant, the view server will accept the sender as the pending backup by creating a new pending view and send it to the primary server (which may be a pending primary or real primary), and when the primary confirm this new view, view server will also send the view to the backup to sync the view state of running server. </p>
+<p>And this may cause a situation that the backup server may be dead after it sends a ping to view server (that is, it never pings again). For this issue, it is designed in the timer, which manage the following update of primary server and backup server. </p>
+<p>The timer will update the time stored in the view server, and it will check whether current primary and backup is dead (time between current time and last ping time exceeds a certain value). In the whole system, servers will continuously ping to view server in every constant time interval, the view server needs to record the latest ping time of each server. </p>
+<p>When primary is dead, set current backup as the pending primary, and perform the routine of view update mentioned before. And it also needs to send the new view to the old primary, informing it that it is no longer the primary server. </p>
+<p>Here is a special case that there is no backup available (which is null), the view server should freeze the view state, waiting until the primary pings again, or the whole system is dead.</p>
+<p>When a backup is dead, the view server will find a new server which is alive to become a backup, update the view. In this case, the primary server needs to sync the application state with the new backup server, it will be covered in the next section. </p>
+<h2 id="The-view-access-from-other-server"><a href="#The-view-access-from-other-server" class="headerlink" title="The view access from other server"></a>The view access from other server</h2><p>According to the test case, when a client or server query for the view from view server, the view sever need to answer with the latest view, that is, the pending view when primary not acknowledged or current view when primary acknowledged. </p>
+<h1 id="Primary-Server-and-Backup-Server-Design"><a href="#Primary-Server-and-Backup-Server-Design" class="headerlink" title="Primary Server and Backup Server Design"></a>Primary Server and Backup Server Design</h1><h2 id="Information-forwarding-to-backup-server"><a href="#Information-forwarding-to-backup-server" class="headerlink" title="Information forwarding to backup server"></a>Information forwarding to backup server</h2><p>The server will never reply if it is not the primary server(client will resend the request when not replied). For the primary server, it will forwarding the request to the backup server(if it exists), it will only reply to client after the backup server inform the primary server that it has finished executing the request. </p>
+<h2 id="Server-state-update-and-state-transfer"><a href="#Server-state-update-and-state-transfer" class="headerlink" title="Server state update and state transfer"></a>Server state update and state transfer</h2><p>When a new backup updates, the primary server need to sync the application state with it, the primary server should not update its view(and thus will not acknowledge the view update to view server) before the state transfer to the new backup server is finished. And this process is also implemented with a request-reply design. </p>
+<h2 id="For-resending-mechanism"><a href="#For-resending-mechanism" class="headerlink" title="For resending mechanism"></a>For resending mechanism</h2><p>The design of client is almost the same with previous lab, only adding the part of query for <code>GetView</code>, it is send when the request is failed (because the primary server it thinks may not be primary anymore). And for the forwarding request, state transfer request, are also implemented in the server timer. </p>
+<p>When reply not received, resend the request when timer update, so the system can tolerate unreliable network. </p>
+
   </div>
+  
+    
+      <a id="older" class="blog-nav" href="/2025/02/18/CS15-445%20Lab%200/">OLDER&nbsp;&gt;</a>
+      
+        
+            
 </div>
-
         <div class="footer">
   
     <div class="footer-more">
