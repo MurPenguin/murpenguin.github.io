@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="keywords" content="" />
+  <meta name="author" content="MurPenguin" />
+  <meta name="description" content="" />
+  
+  
+  <title>
+    
+      Lab4 ShardStore System based on PMMC 
+      
+      
+    
+  </title>
+
+  
+    <link rel="apple-touch-icon" href="/images/favicon.png">
+    <link rel="icon" href="/images/favicon.png">
+  
+
+  <!-- Raleway-Font -->
+  <link href="https://fonts.googleapis.com/css?family=Montserrat|Roboto:400,400italic,600|Roboto+Mono" rel="stylesheet">
+
+  <!-- hexo site css -->
+  
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/common.css">
+<link rel="stylesheet" href="/iconfont/iconfont.css">
+
+
+  
+
+  
+    
+<link rel="stylesheet" href="/css/post.css">
+
+  
+
+  <!-- jquery3.3.1 -->
+  <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+
+  <!-- fancybox -->
+  <link href="https://cdn.bootcss.com/fancybox/3.5.2/jquery.fancybox.min.css" rel="stylesheet">
+  <script async src="https://cdn.bootcss.com/fancybox/3.5.2/jquery.fancybox.min.js"></script>
+  
+<script src="/js/fancybox.js"></script>
+
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+  <body>
+    <div id="app">
+      <div class="header">
+  <a href="/">Murmansk Penguin</a>
+</div>
+
+
+      <p class="links">
+  
+    <a title="archives" target="" href="/archives/">
+      <i class="iconfont icon-bookmark"></i>
+    </a>
+  
+    <a title="github" target="_blank" href="https://github.com/MurPenguin">
+      <i class="iconfont icon-github"></i>
+    </a>
+  
+    <a title="email" target="" href="zhao_xiaoran@zju.edu.cn">
+      <i class="iconfont icon-envelope"></i>
+    </a>
+  
+    <a title="rss" target="_blank" href="/atom.xml">
+      <i class="iconfont icon-rss"></i>
+    </a>
+  
+</p>
+
+
+      <div class="main">
+        <!-- 文章详情页，展示文章具体内容，url形式：https://yoursite/文章标题/ -->
+<!-- 同时为「标签tag」，「朋友friend」，「分类categories」，「关于about」页面的承载页面，具体展示取决于page.type -->
+
+<!-- LaTex Display -->
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+</script>
+<script>
+  MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']]
+    }
+  };
+</script>
+
+<div class="post">
+  <h3 class="date">
+    Mar 05, 2025
+  </h3>
+  <h1>
+    Lab4 ShardStore System based on PMMC
+  </h1>
+  <div class="content markdown-body">
+    <p>This system requires us to build a distributed shard-store system, each shard store with paxos replicated. It is illustrated as follows: </p>
+<h2 id="System-Overview"><a href="#System-Overview" class="headerlink" title="System Overview"></a>System Overview</h2><p><img src="/images/image-20250429173212685.png" alt="image-20250429173212685.png"></p>
+<p>The system consists of a shard master and several shard groups. Among shard groups, there is a groups act as a shard store coordinator, which controls the process of 2 Phase Commit, while others act as participants. </p>
+<p>In each shard store group, member servers has a paxos sub node to communicate with each other by replicating operation logs. If a shard store server want to replicate an operation to other server, it will wrap this operation into a paxos request and then send it to paxos sub-node, which will then send this operation to all of the member servers (including itself) as paxos decision. The subnode can be viewed as an inside module of each server node, so the communication is reliable.</p>
+<p><img src="/images/image-20250430183049930.png" alt="image-20250430183049930.png"></p>
+<h2 id="Config-Sync-and-Update"><a href="#Config-Sync-and-Update" class="headerlink" title="Config Sync and Update"></a>Config Sync and Update</h2><h3 id="Config-Query-and-Reply"><a href="#Config-Query-and-Reply" class="headerlink" title="Config Query and Reply"></a>Config Query and Reply</h3><p>First let’s briefly introduce shard-store: this is a method that separate key-value store data to multiple groups (the ‘shard’). And using a hash function, each key in the data can be mapped to a shard, which will be stored into storage units. By using this method, the server side can process clients’ request to each shard unit (shard store group in the figure), managing balancing the workload. </p>
+<p>So how to make each shard mapped to the storage units? In this lab, it is managed by a shard store master, implemented as a paxos replicated server group. It attempts the groups hold same number of shards like the figure below.</p>
+<p>The system has 3 shard store groups holding 10 shards.</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Group1     Group2      Group3 </span><br><span class="line">  s1 s2 s3   s4 s5 s6   s7 s8 s9 s10 </span><br></pre></td></tr></table></figure>
+
+<p>When a group leave the system, like group3 in this example, the shard-master will reallocate remaining shards(s7, s8, s9, s10) to other groups, which comes out to be:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Group1              Group2</span><br><span class="line">  s1 s2 s3 s7 s8   s4 s5 s6 s9 s10</span><br></pre></td></tr></table></figure>
+
+<p>And when adding groups to the system, the shard master will extract shards from other groups and reallocating to the joined group.</p>
+<p>The algorithm of allocating shard to each group is simple, just keep the number of shards in each group with in <code>[num_shards / num_groups, num_shards / num_groups + 1]</code>, so it will not be described here. </p>
+<p>The shard group and clients get to know the config by querying the shard master periodically, and shard master will reply the queried one back. </p>
+<p>There is a point worth mentioning: to guarantee consistency, for all the clients and shard store server, they need to update the config one by one, start with a non-initial config and skip a config is not allowed in this system. </p>
+<p>This means that ‘join’ and ‘leave’ operation in the config update does not refers to group ‘appears’ or ‘disappears’ in the global view, instead only the participation status is updated. So whatever a shard store group is in a config, they are also required to update its config to this one, although no actual shard will be allocated to it. </p>
+<p>For clients and shard group need to update its know view one by one, there exists a issue that the config of shard master is advanced than them, so shard master need to keep a history (log) of all the configs for query. </p>
+<h3 id="Shard-Config-Update"><a href="#Shard-Config-Update" class="headerlink" title="Shard Config Update"></a>Shard Config Update</h3><p>In this part, the shard master should update config (write new config to its log) first, then others can query the new config and update.</p>
+<p>In implementation, the shard master is a paxos server group that can replicate config update operation. When <code>reconfig</code> command is send from outside to the system, servers in shard master will first replicate it with paxos, then execute it after this operation is decided. </p>
+<p>Based on this requirement, there will be no Server-Sub paxos node design in shard masters, only simple paxos server node is sufficient to implement the function. </p>
+<p>For clients, after it receive query replies from shard master server, it can just update its config without other operation. And send operation request to the new coordinator, which is chosen by the config information itself, in this lab I use picking the largest indexed one (so there is no need to communicate to confirm the coordinator.) </p>
+<p>But for shard store groups, they need to update its shard data, which may requires obtain data from other groups. In this case, and there is two main approaches: one is the groups that lack some shards send request to the groups holding this shard, the other is the groups send shards to others lacking some shards. Because the former has one more round of communication(send-receive-send ack-receive ack), so use the latter one, that is groups will send shards to others that require this shard in the new config. </p>
+<p>So here is the process of shard config update execute on each group: group know they need update config from the query result from shard master, they collect all the require shards data in the new config, then update config, that is, update the data stored in the application and request record. </p>
+<p>Based on this we can observe that, each groups need to first launch the reconfig in the first state, then execute the actual reconfig after all shards collected, there is two operation needed in this process: launch and execute. And to guarantee consistency, both of these operation need to replicate by paxos. So the whole pipeline of config update is: </p>
+<p>receive query reply -&gt; launch reconfig, send paxos request -&gt; receive paxos decision, launch reconfig -&gt; send related shards to others, receive shards from others -&gt; when all shards collected, and all shards sended, launch execute reconfig, send paxos request -&gt; receive paxos decision, execute reconfig. </p>
+<h2 id="2-Phase-Commit-Process"><a href="#2-Phase-Commit-Process" class="headerlink" title="2 Phase Commit Process"></a>2 Phase Commit Process</h2><p>For single-key command and multi-key command that executed in a single shard group, the process is the same with ordinary case: shard store server replicate the operation in this request with paxos node, and execute after receive paxos decision. </p>
+<p>While for multi-key command that requires inter-shard operation, 2 phase commit method can be used to make this process consistent. </p>
+<h3 id="Process-without-Exception"><a href="#Process-without-Exception" class="headerlink" title="Process without Exception"></a>Process without Exception</h3><p>First let’s introduce the executing process of 2PC without exception (now timeout, not partition, no server crash .etc).</p>
+<p>When coordinator receive a inter-shard request, it need to send prepare message to other participants. And in this stage, coordinator will create a transaction id to uniquely mark this transaction. </p>
+<p>Participants receive prepare message from coordinator, they will add lock on data with keys in the multi-shard command, sending acknowledgement message back. </p>
+<p>After coordinator collect all ack message from concerning groups, it will send commit message to other participants, which will execute the committed operation, and send the result back to coordinator (because there is a multi-get command, which require coordinator collect and merge all the partial read result, and then send it back to clients.)</p>
+<p>There are three multi-key command: multi-get, multi-put, swap. For multi-get command, coordinator finish the transaction when collected all required data; for multi-put command, coordinator finish the transaction when receive all ‘multi-put ok’ from related participants; for swap command, which require participants get to know the key-value of the other, so participants need to put its key-value pair in the prepare ack message first, and coordinator will put the swap pair in the commit messages, then finished when receive ‘swap ok’ from both participants. </p>
+<h3 id="Abort-Process"><a href="#Abort-Process" class="headerlink" title="Abort Process"></a>Abort Process</h3><p>And here is the abort process, in this lab, there are two cases which may case a transaction abort, one is in prepare stage, when participants attempts to add lock on a key in the command, it finds that there its lock state does not allow it to this, it will send acknowledge message with false result to the coordinator; and the other is after coordinator sended prepare messages or commit messages, participants do not reply after a certain amount of time, the coordinator will also launch abort process. </p>
+<p>When coordinator decides to abort a transaction, it will send abort message to other participants, which will release the lock on the keys in the aborted operation, and send its ack back. When coordinator collected all the aborted ack, this transaction is finally aborted. </p>
+<h3 id="Paxos-Replicate-in-this-Lab"><a href="#Paxos-Replicate-in-this-Lab" class="headerlink" title="Paxos Replicate in this Lab"></a>Paxos Replicate in this Lab</h3><p>And there is a point worth mentioning: the <code>coordinator</code> and <code>participant</code> are all server groups, so all the critical operation (like prepare, commit .etc) all need to be replicated by paxos subnodes. That is, we can view the paxos subnode as some layer that guarantee an operation can be executed on all servers with order in the group. Because of this, for every operation coordinator need to first replicate it in prepare stage (not prepare in 2PC!) and after receive prepare paxos decision, broadcast execute stage command to concerning groups, which will also execute it after replicate this operation through paxos subnode. </p>
+<h2 id="Locking-Design"><a href="#Locking-Design" class="headerlink" title="Locking Design"></a>Locking Design</h2><p>In the first version, I use a lock based on counting method, like semaphore, but it fails to guarantee idempotent in resend mechanism design, and cannot work properly on read command and write command. So after fixing, the final lock design is consists of two parts: read lock and write lock.</p>
+<h3 id="Read-Lock"><a href="#Read-Lock" class="headerlink" title="Read Lock"></a>Read Lock</h3><p>The read lock is a multi-map, containing each key in the group and the transaction Ids added on it, which means the read operation current working on it. </p>
+<p>When there is no write lock on this key, transaction can add read key on it. but when read key exists, write key cannot added on it. </p>
+<h3 id="Write-Lock"><a href="#Write-Lock" class="headerlink" title="Write Lock"></a>Write Lock</h3><p>The write lock is a single-map, containing each key in the group and a single transatcion Id added on it, which means that these is a write operation working on it. </p>
+<p>When there is a write lock, any read lock cannot added on it. And for write operation, it will check the transaction id on the lock table, if not its transaction id, which means it is currently occupied by another write operation, this operation will be aborted. </p>
+<h2 id="Currency-Design-and-Reliability-Design-in-this-Lab"><a href="#Currency-Design-and-Reliability-Design-in-this-Lab" class="headerlink" title="Currency Design and Reliability Design in this Lab"></a>Currency Design and Reliability Design in this Lab</h2><p>And here is the core part in this lab: the concurrency design and reliability design. The idea is described in the <a href="https://murpenguin.github.io/2025/04/22/Lab3%20Multi-Paxos%20Replicate%20System/">previous blog</a>. </p>
+<h3 id="Reliability-Design"><a href="#Reliability-Design" class="headerlink" title="Reliability Design"></a>Reliability Design</h3><p>To handle unreliable network, all the essential messages (reconfig, prepare, commit, abort) need to design resend mechanism and idempotent design for handling duplicate requests. </p>
+<p>The triggers of resending are from two cases: client resend and timer update. When client resended messages arrive the coordinator or timer updates, the coordinator will resend reconfig&#x2F;prepare&#x2F;commit&#x2F;abort messages to participants according to the transaction state (prepared, committed, aborted .etc). </p>
+<p>And to guarantee idempotent under this resend design, all the message handlers need to check the execution state and then decide wether accept this command. </p>
+<h3 id="Concurrency-Design"><a href="#Concurrency-Design" class="headerlink" title="Concurrency Design"></a>Concurrency Design</h3><p>As I write in previous blog, the lab requires the system be able to handle concurrent requests from clients and manage complicated intermediate messages and state for resend. </p>
+<p>So I design a transaction control block, index with transaction id to manage this. It containing the transaction state (prepared, committed, aborted, finished), read key set, write key set (for locking), sended messages (transaction prepare, transaction commit .etc), and partial data in executing (like multi-get result collected, and swap data), time stamp to check waining time out and final result to handle resended client requests.</p>
+<p>Based on this deign, all the resend operation and process management can be clearly worked out. </p>
+<h2 id="Some-Bug-Fixes"><a href="#Some-Bug-Fixes" class="headerlink" title="Some Bug Fixes"></a>Some Bug Fixes</h2><p>Finally, record some bug fixes worth mentioning in this lab.</p>
+<h3 id="Guarantee-Atomity"><a href="#Guarantee-Atomity" class="headerlink" title="Guarantee Atomity"></a>Guarantee Atomity</h3><p>In some cases like lock update, multi-key data write. If updating the data while iterating, it may cause concurrency error for multiple thread access. To tackle this issue, it’s better to first store the updating data in a buffer, and assign the finished buffer to the actual data store in a single operation like <code>putAll</code>.</p>
+<h3 id="Defensive-Checking"><a href="#Defensive-Checking" class="headerlink" title="Defensive Checking"></a>Defensive Checking</h3><p>The states (reconfig, config number, transaction state) is fart more complicated than previous lab, so for every handler, need to design defensive checking in case invalid messages. </p>
+
+  </div>
+  
+    
+      <a id="older" class="blog-nav" href="/2025/02/20/CS5223%20Lab%202/">OLDER&nbsp;&gt;</a>
+      
+        
+          <a id="newer" class="blog-nav" href="/2025/05/03/Lab3%20Multi-Paxos%20Replicate%20System/">&lt;&nbsp;NEWER</a>
+          
+            
+</div>
+        <div class="footer">
+  
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/leedom92/hexo-theme-leedom">Copyright © Leedom 2021</a>
+        
+    </div>
+  
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/leedom92/hexo-theme-leedom">Theme by Leedom | Powered by Hexo</a>
+        
+    </div>
+  
+</div>
+
+      </div>
+
+      <div class="back-to-top hidden">
+  <a href="javascript: void(0)">
+    <i class="iconfont icon-chevronup"></i>
+  </a>
+</div>
+
+
+<script src="/js/backtotop.js"></script>
+
+
+
+      
+  <div class="search-icon" id="search-icon">
+    <a href="javascript: void(0)">
+      <i class="iconfont icon-search"></i>
+    </a>
+  </div>
+
+  <div class="search-overlay hidden">
+    <div class="search-content" tabindex="0">
+      <div class="search-box">
+        <div class="search-title">
+          <!-- <span class="search-icon-input">
+            <a href="javascript: void(0)">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </span> -->
+          
+            <input type="text" class="search-input" id="search-input" placeholder="$ grep...">
+          
+          <span class="search-close-icon" id="search-close-icon">
+            <a href="javascript: void(0)">
+              <i class="iconfont icon-close"></i>
+            </a>
+          </span>
+        </div>
+        <div class="search-result" id="search-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    var inputArea = document.querySelector("#search-input")
+    var searchOverlayArea = document.querySelector(".search-overlay")
+
+    // inputArea.onclick = function() {
+    //   getSearchFile()
+    //   this.onclick = null
+    // }
+
+    inputArea.onkeydown = function() {
+      if(event.keyCode == 13)
+        return false
+    }
+
+    function openOrHideSearchContent() {
+      let isHidden = searchOverlayArea.classList.contains('hidden')
+      if (isHidden) {
+        searchOverlayArea.classList.remove('hidden')
+        document.body.classList.add('hidden')
+        inputArea.focus()
+        getSearchFile()
+      } else {
+        searchOverlayArea.classList.add('hidden')
+        document.body.classList.remove('hidden')
+      }
+    }
+
+    function blurSearchContent(e) {
+      if (e.target === searchOverlayArea) {
+        openOrHideSearchContent()
+      }
+    }
+
+    document.querySelector("#search-icon").addEventListener("click", openOrHideSearchContent, false)
+    document.querySelector("#search-close-icon").addEventListener("click", openOrHideSearchContent, false)
+    searchOverlayArea.addEventListener("click", blurSearchContent, false)
+
+    var searchFunc = function (path, search_id, content_id) {
+      'use strict';
+      var $input = document.getElementById(search_id);
+      var $resultContent = document.getElementById(content_id);
+      $resultContent.innerHTML = "<ul><span class='local-search-empty'><span></ul>";
+      // $resultContent.innerHTML = "<ul><span class='local-search-empty'>First search, index file loading, please wait...<span></ul>";
+      $.ajax({
+        // 0x01. load xml file
+        url: path,
+        dataType: "xml",
+        success: function (xmlResponse) {
+          // 0x02. parse xml file
+          var datas = $("entry", xmlResponse).map(function () {
+            return {
+              title: $("title", this).text(),
+              content: $("content", this).text(),
+              url: $("url", this).text()
+            };
+          }).get();
+          $resultContent.innerHTML = "";
+
+          $input.addEventListener('input', function () {
+            // 0x03. parse query to keywords list
+            var str = '<ul class=\"search-result-list\">';
+            var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
+            $resultContent.innerHTML = "";
+            if (this.value.trim().length <= 0) {
+              return;
+            }
+            // 0x04. perform local searching
+            datas.forEach(function (data) {
+              var isMatch = true;
+              var content_index = [];
+              if (!data.title || data.title.trim() === '') {
+                data.title = "Untitled";
+              }
+              var orig_data_title = data.title.trim();
+              var data_title = orig_data_title.toLowerCase();
+              var orig_data_content = data.content.trim().replace(/<[^>]+>/g, "");
+              var data_content = orig_data_content.toLowerCase();
+              var data_url = data.url;
+              var index_title = -1;
+              var index_content = -1;
+              var first_occur = -1;
+              // only match artiles with not empty contents
+              if (data_content !== '') {
+                keywords.forEach(function (keyword, i) {
+                  index_title = data_title.indexOf(keyword);
+                  index_content = data_content.indexOf(keyword);
+
+                  if (index_title < 0 && index_content < 0) {
+                    isMatch = false;
+                  } else {
+                    if (index_content < 0) {
+                      index_content = 0;
+                    }
+                    if (i == 0) {
+                      first_occur = index_content;
+                    }
+                    // content_index.push({index_content:index_content, keyword_len:keyword_len});
+                  }
+                });
+              } else {
+                isMatch = false;
+              }
+              // 0x05. show search results
+              if (isMatch) {
+                str += "<li><a href='" + data_url + "' class='search-result-title'><h2>" + orig_data_title + "</h2></a>";
+                var content = orig_data_content;
+                if (first_occur >= 0) {
+                  // cut out 100 characters
+                  var start = first_occur - 20;
+                  var end = first_occur + 80;
+
+                  if (start < 0) {
+                    start = 0;
+                  }
+
+                  if (start == 0) {
+                    end = 100;
+                  }
+
+                  if (end > content.length) {
+                    end = content.length;
+                  }
+
+                  var match_content = content.substr(start, end);
+
+                  // highlight all keywords
+                  keywords.forEach(function (keyword) {
+                    var regS = new RegExp(keyword, "gi");
+                    match_content = match_content.replace(regS, "<span class=\"search-keyword\">" + keyword + "</span>");
+                  });
+
+                  str += "<h3 class=\"search-result-abstract\">" + match_content + "...</h3>"
+                }
+                str += "<hr></li>";
+              }
+            });
+            str += "</ul>";
+            if (str.indexOf('<li>') === -1) {
+              return $resultContent.innerHTML = "<ul><span class='local-search-empty'>No result<span></ul>";
+            }
+            $resultContent.innerHTML = str;
+          });
+        },
+        error: function(xhr, status, error) {
+          $resultContent.innerHTML = ""
+          if (xhr.status === 404) {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>The search.xml file was not found, please refer to：<a href='https://github.com/leedom92/hexo-theme-leedom#configuration' target='_black'>configuration</a><span></ul>";
+          } else {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>The request failed, Try to refresh the page or try again later.<span></ul>";
+          }
+        }
+      });
+      $(document).on('click', '#search-close-icon', function() {
+        $('#search-input').val('');
+        $('#search-result').html('');
+      });
+    }
+
+    var getSearchFile = function() {
+        var path = "/search.xml";
+        searchFunc(path, 'search-input', 'search-result');
+    }
+  </script>
+
+
+
+
+    </div>
+  </body>
+</html>
