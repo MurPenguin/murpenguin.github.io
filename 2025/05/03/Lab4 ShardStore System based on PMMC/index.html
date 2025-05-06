@@ -105,8 +105,8 @@
     Lab4 ShardStore System based on PMMC
   </h1>
   <div class="content markdown-body">
-    <p>This system requires us to build a distributed shard-store system, each shard store with paxos replicated. It is illustrated as follows: </p>
-<h2 id="System-Overview"><a href="#System-Overview" class="headerlink" title="System Overview"></a>System Overview</h2><p><img src="/images/image-20250429173212685.png" alt="image-20250429173212685.png"></p>
+    <h2 id="System-Overview"><a href="#System-Overview" class="headerlink" title="System Overview"></a>System Overview</h2><p>This system requires us to build a distributed shard-store system, each shard store with paxos replicated, which is illustrated as follows: </p>
+<p><img src="/images/image-20250429173212685.png" alt="image-20250429173212685.png"></p>
 <p>The system consists of a shard master and several shard groups. Among shard groups, there is a groups act as a shard store coordinator, which controls the process of 2 Phase Commit, while others act as participants. </p>
 <p>In each shard store group, member servers has a paxos sub node to communicate with each other by replicating operation logs. If a shard store server want to replicate an operation to other server, it will wrap this operation into a paxos request and then send it to paxos sub-node, which will then send this operation to all of the member servers (including itself) as paxos decision. The subnode can be viewed as an inside module of each server node, so the communication is reliable.</p>
 <p><img src="/images/image-20250430183049930.png" alt="image-20250430183049930.png"></p>
